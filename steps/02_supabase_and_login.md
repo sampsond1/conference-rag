@@ -46,7 +46,7 @@ You need values for **two config files**. Here's where to find each one:
 | `SUPABASE_SERVICE_KEY` | Settings → API → `service_role` key (click "Reveal") |
 | `SUPABASE_PROJECT_REF` | Extract from your URL: `https://XXXXX.supabase.co` → `XXXXX` |
 | `SUPABASE_ACCESS_TOKEN` | [Account Tokens page](https://supabase.com/dashboard/account/tokens) → Generate new token |
-| `OPENAI_API_KEY` | [OpenAI API Keys](https://platform.openai.com/api-keys) → Create new secret key |
+| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/) → Create or copy a Gemini API key |
 
 ### 3. Fill In Your Config Files
 
@@ -61,7 +61,7 @@ You need values for **two config files**. Here's where to find each one:
 **config.secret.json:**
 ```json
 {
-    "OPENAI_API_KEY": "sk-proj-...",
+    "GEMINI_API_KEY": "your-gemini-api-key",
     "SUPABASE_ACCESS_TOKEN": "sbp_...",
     "SUPABASE_PROJECT_REF": "xyzabc123",
     "SUPABASE_SERVICE_KEY": "eyJ..."

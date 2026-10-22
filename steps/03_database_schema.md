@@ -43,6 +43,8 @@ This script creates:
 
 This is **Row Level Security (RLS)** in action. Both tables have RLS enabled, but their *policies* define very different access rules.
 
+RLS policies are only one gate: a Postgres role also needs a table privilege (`GRANT`) to perform an operation. The schema script grants `anon` and `authenticated` roles permission to select from both tables and insert page views, and gives `service_role` the privileges needed to import and update sentence data. RLS then filters rows: both roles can see page views, but only authenticated users can see sentence rows. So `anon` can query the sentence table but receives zero rows.
+
 ### Understanding the Schema
 
 ```sql
@@ -67,6 +69,8 @@ After the script completes, try this experiment. Ask your AI assistant to help y
 
 1. **Query `page_views`** → ✅ Should work! The anon key can read this table.
 2. **Query `sentence_embeddings`** → ❌ Should return **zero rows**! RLS blocks unauthenticated access.
+
+If `sentence_embeddings` is still empty, zero rows alone does not prove RLS blocked access. Repeat this check after sentence data has been imported.
 
 Here's a starting point:
 
@@ -110,7 +114,7 @@ print(f"sentence_embeddings: {len(result.data)} rows (expected: 0) 🔒")
 ┌────────────────────────────────────────┐
 │ Self-Built Security (Edge Functions)   │
 │                                        │
-│  OpenAI API key → Supabase can't       │
+│  Gemini API key → Supabase can't       │
 │  protect this for you — YOU build      │
 │  the secure layer with Edge Functions  │
 │  ┌──────────────┐  ┌──────────────┐   │
@@ -122,7 +126,7 @@ print(f"sentence_embeddings: {len(result.data)} rows (expected: 0) 🔒")
 └────────────────────────────────────────┘
 ```
 
-**Key insight**: Supabase protects your *database* with RLS, but it can't protect *third-party API keys* like OpenAI. That's why you'll build Edge Functions — they're the secure intermediary you control.
+**Key insight**: Supabase protects your *database* with RLS, but it can't protect *third-party API keys* like Gemini. That's why you'll build Edge Functions — they're the secure intermediary you control.
 
 ## Verification
 

@@ -25,14 +25,15 @@ You need one more Edge Function: `generate-answer`. Ask your AI assistant to hel
 > 🤖 **Tell your AI assistant**: *"I need to create a Supabase Edge Function called `generate-answer`. It should:*
 > - *Accept a POST request with `{ "question": "...", "context_talks": [...] }` in the body*
 > - *Each context talk has `{ title, speaker, text }`*
-> - *Use GPT-4o to generate an answer based on the provided conference talk context*
-> - *The prompt should instruct GPT to cite which talks it draws from*
+> - *Call the Gemini API's `generateContent` endpoint using `gemini-3.8-flash` to answer from the provided conference talk context*
+> - *Keep the Gemini API key server-side in `Deno.env.get('GEMINI_API_KEY')` and send it in the `x-goog-api-key` header*
+> - *The prompt should instruct Gemini to answer from the supplied context and cite which talks it draws from*
 > - *Return `{ "answer": "..." }` in the response*
 > - *Handle CORS and verify authentication (same pattern as embed-question)"*
 
 The function lives at: `supabase/functions/generate-answer/index.ts`
 
-> 💡 **Need a reference?** See [github.com/michaeltreynolds/cragger/tree/main/supabase/functions](https://github.com/michaeltreynolds/cragger/tree/main/supabase/functions)
+> 💡 **Need a reference?** Use the [Supabase Edge Functions docs](https://supabase.com/docs/guides/functions) and [Gemini API docs](https://ai.google.dev/gemini-api/docs).
 
 ### What's Happening Behind the Scenes
 
@@ -42,7 +43,7 @@ When you ask a question, the full RAG pipeline executes:
 Your Question: "How can I find peace during hard times?"
     ↓
 1. embed-question Edge Function
-    → Sends question to OpenAI
+    → Sends question to Gemini Embedding API
     → Returns 1,536-dimensional embedding
     ↓
 2. Vector Search (match_sentences)
@@ -55,7 +56,7 @@ Your Question: "How can I find peace during hard times?"
     → Reconstructs complete talk context
     ↓
 4. generate-answer Edge Function
-    → Sends question + full talk context to GPT-4o
+    → Sends question + full talk context to Gemini Flash
     → Returns a natural language answer with citations
     ↓
 5. Display in UI ✨
@@ -87,7 +88,7 @@ You should get an AI-generated answer with source citations!
 | Issue | Solution |
 |-------|----------|
 | Search shows "Not Ready" | Make sure you completed the relevant step (data import, edge function deployment) |
-| "Failed to get embedding" | Check Edge Function deployment and that OPENAI_API_KEY secret is set |
+| "Failed to get embedding" | Check Edge Function deployment and that GEMINI_API_KEY secret is set |
 | No search results | Verify data was imported (check row count in Supabase Dashboard) |
 | Login doesn't work | Check redirect URL in Supabase Auth settings |
 | Changes don't appear | Hard refresh (Ctrl+Shift+R) or try incognito window |

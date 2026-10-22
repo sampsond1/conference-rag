@@ -24,13 +24,16 @@ import json
 import os
 import sys
 import time
+import uuid
 
+import requests
 from supabase import create_client
 from tqdm import tqdm
 
 
 INPUT_FILE = os.path.join('scripts', 'output', 'sentences_with_embeddings.json')
 BATCH_SIZE = 100
+MAX_BATCH_RETRIES = 5
 
 
 def load_config():
@@ -39,6 +42,29 @@ def load_config():
     with open('config.secret.json', 'r') as f:
         secrets = json.load(f)
     return public_config, secrets
+
+
+def run_management_query(secrets, query):
+    """Run administrative SQL through the Supabase Management API."""
+    project_ref = secrets.get('SUPABASE_PROJECT_REF')
+    access_token = secrets.get('SUPABASE_ACCESS_TOKEN')
+    if not project_ref or not access_token:
+        raise RuntimeError(
+            "SUPABASE_PROJECT_REF and SUPABASE_ACCESS_TOKEN are required "
+            "to safely clear and verify the table."
+        )
+
+    response = requests.post(
+        f"https://api.supabase.com/v1/projects/{project_ref}/database/query",
+        headers={
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+        },
+        json={'query': query},
+        timeout=60,
+    )
+    response.raise_for_status()
+    return response.json() if response.content else None
 
 
 def main():
@@ -70,17 +96,16 @@ def main():
     print("=" * 60)
 
     try:
-        result = client.table('sentence_embeddings').select('id', count='exact').limit(1).execute()
-        existing_count = result.count or 0
-        if existing_count > 0:
-            print(f"   Truncating {existing_count:,} existing rows...")
-            client.table('sentence_embeddings').delete().neq('id', '00000000-0000-0000-0000-000000000000').execute()
-            print("   ✅ Table truncated.")
-        else:
-            print("   Table is empty — ready for import.")
+        # TRUNCATE avoids a slow row-by-row delete when vectors already exist.
+        run_management_query(secrets, 'TRUNCATE TABLE public.sentence_embeddings;')
+        remaining = client.table('sentence_embeddings').select('id').limit(1).execute()
+        if remaining.data:
+            raise RuntimeError("The table still contains rows after truncation.")
+        print("   Table truncated and verified empty.")
     except Exception as e:
-        print(f"   ⚠️ Could not check existing data: {e}")
-        print("   Proceeding with import anyway...")
+        print(f"   ❌ Could not clear and verify the table: {e}")
+        print("   Stopping without importing to avoid duplicate or mixed data.")
+        sys.exit(1)
 
     # Batch import (much faster than individual updates!)
     print(f"\n   Importing {len(records):,} records in batches of {BATCH_SIZE}...\n")
@@ -90,12 +115,35 @@ def main():
 
     for i in tqdm(range(0, len(records), BATCH_SIZE), desc="Importing"):
         batch = records[i:i + BATCH_SIZE]
-        try:
-            client.table('sentence_embeddings').insert(batch).execute()
-            success += len(batch)
-        except Exception as e:
-            print(f"\nError at batch {i // BATCH_SIZE}: {e}")
-            errors += len(batch)
+        # Stable primary keys make retries safe if Supabase committed a request
+        # but the connection dropped before the client received its response.
+        batch_with_ids = []
+        for record in batch:
+            record_with_id = dict(record)
+            record_with_id['id'] = str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"conference-rag:{record['talk_id']}:{record['sentence_num']}"
+            ))
+            batch_with_ids.append(record_with_id)
+
+        for attempt in range(MAX_BATCH_RETRIES + 1):
+            try:
+                client.table('sentence_embeddings').upsert(
+                    batch_with_ids, on_conflict='id'
+                ).execute()
+                success += len(batch)
+                break
+            except Exception as e:
+                if attempt < MAX_BATCH_RETRIES:
+                    delay = min(2 ** attempt, 30)
+                    print(
+                        f"\nBatch {i // BATCH_SIZE} failed; retry "
+                        f"{attempt + 1}/{MAX_BATCH_RETRIES} in {delay}s: {e}"
+                    )
+                    time.sleep(delay)
+                else:
+                    print(f"\nError at batch {i // BATCH_SIZE} after retries: {e}")
+                    errors += len(batch)
         time.sleep(0.1)
 
     print(f"\n✅ Import complete!")
@@ -104,17 +152,23 @@ def main():
         print(f"   Errors:  {errors:,}")
 
     # Verify
-    result = client.table('sentence_embeddings').select('id', count='exact').limit(1).execute()
-    total = result.count or 0
-
-    embedded_result = client.table('sentence_embeddings') \
-        .select('id', count='exact') \
-        .not_('embedding', 'is', 'null') \
-        .limit(1).execute()
-    with_emb = embedded_result.count or 0
+    count_result = run_management_query(
+        secrets,
+        "SELECT COUNT(*)::int AS total, "
+        "COUNT(embedding)::int AS with_embeddings "
+        "FROM public.sentence_embeddings;",
+    )
+    if not count_result or not isinstance(count_result, list):
+        raise RuntimeError(f"Unexpected database verification response: {count_result}")
+    total = count_result[0]['total']
+    with_emb = count_result[0]['with_embeddings']
 
     print(f"\n   Total rows:          {total:,}")
     print(f"   Rows with embeddings: {with_emb:,}")
+
+    if errors or total != len(records) or with_emb != len(records):
+        print("\n❌ Import verification failed. Re-run the script to retry safely.")
+        sys.exit(1)
 
     print(f"\n🎉 Semantic Search is now ready!")
     print(f"   Refresh your site — the 🧠 Semantic Search panel should turn GREEN.")

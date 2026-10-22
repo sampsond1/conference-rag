@@ -31,7 +31,7 @@ Your app has three search modes that **light up** as you complete each milestone
        ├─── Supabase Auth (magic link login)
        │
        ├─── Edge Function: embed-question
-       │         ↓ OpenAI API (server-side 🔒)
+       │         ↓ Gemini Embedding API (server-side 🔒)
        │         ↓ Returns embedding vector
        │
        ├─── Supabase Database (pgvector)
@@ -40,7 +40,7 @@ Your app has three search modes that **light up** as you complete each milestone
        │         ↓ Grouped by talk, ranked
        │
        └─── Edge Function: generate-answer
-                ↓ GPT-4o (server-side 🔒)
+                ↓ Gemini Flash (server-side 🔒)
                 ↓ Returns final answer
 ```
 
@@ -58,7 +58,7 @@ Your app has three search modes that **light up** as you complete each milestone
 **You'll need:**
 - [GitHub](https://github.com) account
 - [Supabase](https://supabase.com) account (free tier)
-- [OpenAI API key](https://platform.openai.com/api-keys) (~$0.60 usage)
+- [Gemini API key](https://aistudio.google.com/) (free tier available; subject to quotas)
 - Python 3.9+ installed locally
 - An AI coding assistant (pick one):
   - **Antigravity** (VS Code-based IDE) — [antigravity.google](https://antigravity.google)
@@ -72,7 +72,7 @@ Your app has three search modes that **light up** as you complete each milestone
 
 ## Cost & Time
 
-- 💰 **~$0.60** in OpenAI API usage
+- 💰 **Gemini free tier available** — API quotas and pricing can change; check Google AI Studio before large runs
 - ⏱️ **~2 hours** total across all steps
 
 ## Let's get started! → [Step 01: Fork & Deploy](01_fork_and_deploy.md)

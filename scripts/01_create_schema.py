@@ -62,8 +62,20 @@ CREATE TABLE IF NOT EXISTS sentence_embeddings (
 CREATE INDEX IF NOT EXISTS sentence_embeddings_talk_id_idx 
 ON sentence_embeddings(talk_id);
 
+-- Create an approximate nearest-neighbor index for cosine similarity search.
+-- This matches the <=> operator used by match_sentences().
+CREATE INDEX IF NOT EXISTS sentence_embeddings_embedding_hnsw_idx
+ON sentence_embeddings USING hnsw (embedding vector_cosine_ops)
+WITH (m = 8, ef_construction = 32);
+
 -- Enable Row Level Security
 ALTER TABLE sentence_embeddings ENABLE ROW LEVEL SECURITY;
+
+-- Table privileges are required in addition to RLS policies.
+-- Anon may issue SELECT, but RLS has no anon SELECT policy, so it sees no rows.
+-- Authenticated users may read rows; the service role imports and updates data.
+GRANT SELECT ON public.sentence_embeddings TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.sentence_embeddings TO service_role;
 
 -- RLS policy: authenticated users can read
 DROP POLICY IF EXISTS "Allow authenticated users to read" ON sentence_embeddings;
@@ -86,6 +98,9 @@ CREATE TABLE IF NOT EXISTS page_views (
 );
 
 ALTER TABLE page_views ENABLE ROW LEVEL SECURITY;
+
+-- Let anon/authenticated make the operations allowed by the RLS policies below.
+GRANT SELECT, INSERT ON public.page_views TO anon, authenticated;
 
 -- Anyone (including unauthenticated visitors) can insert page views
 DROP POLICY IF EXISTS "Allow public inserts" ON page_views;

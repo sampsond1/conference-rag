@@ -30,7 +30,7 @@ Follow the step-by-step guides in the `steps/` folder:
 **Prerequisites:**
 - [Supabase](https://supabase.com) account (free tier)
 - [GitHub](https://github.com) account
-- [OpenAI API key](https://platform.openai.com/api-keys) (~$0.60 usage)
+- [Gemini API key](https://aistudio.google.com/) (free tier available; subject to quotas)
 - Python 3.9+
 - An AI coding assistant (Antigravity, GitHub Copilot, or Cursor)
 
@@ -52,7 +52,7 @@ Your AI assistant will automatically read [`ai_agent_instructions.md`](ai_agent_
        ├─── Supabase Auth (magic link)
        │
        ├─── Edge Function: embed-question
-       │         ↓ OpenAI API (server-side 🔒)
+       │         ↓ Gemini Embedding API (server-side 🔒)
        │         ↓ Returns embedding vector
        │
        ├─── Supabase Database (pgvector)
@@ -60,7 +60,7 @@ Your AI assistant will automatically read [`ai_agent_instructions.md`](ai_agent_
        │         ↓ Returns similar sentences
        │
        └─── Edge Function: generate-answer
-                ↓ GPT-4o (server-side 🔒)
+                ↓ Gemini Flash (server-side 🔒)
                 ↓ Returns final answer
 ```
 
@@ -108,7 +108,7 @@ conference-rag/
 | Component | Security Approach |
 |-----------|------------------|
 | Supabase anon key | Safe to expose in `config.public.json` (protected by RLS) |
-| OpenAI API key | Server-side only via Edge Functions (in `config.secret.json`) |
+| Gemini API key | Local pipeline script via `config.secret.json`; deployed Edge Functions via Supabase secrets; never browser code |
 | Database access | Row Level Security policies |
 | Transport | HTTPS enforced by GitHub Pages |
 
@@ -138,7 +138,7 @@ conference-rag/
 | Magic link email not arriving | Free tier allows only **3 per hour** — wait and try again, check spam |
 | Changes don't appear | Hard refresh (Ctrl+Shift+R) or try incognito window |
 | Search shows "Not Ready" | Complete the corresponding step first |
-| "Failed to get embedding" | Deploy Edge Functions and set OPENAI_API_KEY secret |
+| "Failed to get embedding" | Deploy Edge Functions and set GEMINI_API_KEY secret |
 | "Database search failed" | Run `scripts/01_create_schema.py` |
 | No search results | Import data with `scripts/03_import_data.py` |
 

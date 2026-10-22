@@ -41,9 +41,9 @@ This is a full-stack RAG application that searches and answers questions about G
 ```
 Browser (GitHub Pages)
   → Supabase Auth (magic link login)
-  → Edge Function: embed-question (OpenAI API)
+  → Edge Function: embed-question (Gemini Embedding API)
   → Supabase Database (pgvector similarity search)
-  → Edge Function: generate-answer (GPT-4o)
+  → Edge Function: generate-answer (Gemini Flash)
   → Display answer with source citations
 ```
 
@@ -72,7 +72,7 @@ These are the core concepts students should understand by the end. When opportun
 ### 4. Edge Functions (Serverless Computing)
 - **What**: Server-side code that runs on demand, without managing servers
 - **Why it matters**: Keeps API keys secure, scales automatically, costs nearly nothing at low volume
-- **Key insight**: Supabase protects your *database* with RLS, but it can't protect *third-party API keys* like OpenAI — you have to build that secure layer yourself
+- **Key insight**: Supabase protects your *database* with RLS, but it can't protect *third-party API keys* like Gemini — you have to build that secure layer yourself
 - **Teach them**: Why API keys must stay server-side, how CORS works, what Deno is, how environment variables/secrets work
 
 ### 5. Row Level Security (RLS)
@@ -86,8 +86,8 @@ These are the core concepts students should understand by the end. When opportun
 - **Why it matters**: Real applications always have multiple security layers — understanding which layer protects what is fundamental
 - **Key insight**: There are two distinct security layers students must understand:
   1. **Supabase-managed**: The anon key + RLS policies protect your database. Supabase handles this for you.
-  2. **Self-built**: Supabase can't protect your OpenAI key — you build Edge Functions as the secure intermediary.
-- **Teach them**: How magic links work, JWT tokens, why the anon key is safe to expose, why the service_role key is dangerous, how Edge Functions verify auth before calling OpenAI
+  2. **Self-built**: Supabase can't protect your Gemini key — you build Edge Functions as the secure intermediary.
+- **Teach them**: How magic links work, JWT tokens, why the anon key is safe to expose, why the service_role key is dangerous, how Edge Functions verify auth before calling Gemini
 ### 7. Production Deployment
 - **What**: Taking code from development to a live, publicly-accessible application
 - **Why it matters**: Building something real that others can use is deeply satisfying and professionally valuable
@@ -123,7 +123,7 @@ The project splits configuration into two files:
 | File | Contains | Committed? | Used By |
 |------|---------|:-:|-----|
 | `config.public.json` | Supabase URL + anon key | ✅ Yes | Browser (via `config.js`) + scripts |
-| `config.secret.json` | OpenAI API key, Supabase service key, access token, project ref | ❌ Git-ignored | Scripts only (server-side) |
+| `config.secret.json` | Gemini API key, Supabase service key, access token, project ref | ❌ Git-ignored | Local pipeline scripts; never browser code |
 
 The anon key is safe to commit because Row Level Security controls what it can access. The service key bypasses all RLS — it must never be exposed.
 
@@ -138,7 +138,7 @@ Scripts save intermediate data to `scripts/output/` — **encourage students to 
 | `04_embed_data.py` | `scripts/output/sentences_with_embeddings.json` | Sentences with 1,536-dim vectors added |
 | `05_update_embeddings.py` | (updates database) | Embeddings imported to Supabase |
 
-The embedding step (04) is separated from the database import (05) so that a database error won't waste the ~$0.60 in OpenAI API costs. The embedding file is saved to disk as a safety net.
+The embedding step (04) is separated from the database import (05) so a database error won't waste API quota. The embedding file is saved to disk as a safety net. Gemini Embedding 2 currently has a free tier, subject to Google's quotas and terms.
 
 ## Edge Function Implementation Notes
 
@@ -148,13 +148,14 @@ In Steps 05-06, students are asked to **create their own Edge Functions** with h
 
 **`embed-question`** (Step 05):
 - POST endpoint accepting `{ "question": "..." }`
-- Calls OpenAI `text-embedding-3-small` with the question text
+- Calls Gemini Embedding 2 (`gemini-embedding-2`) with `task: question answering | query: {question}`
+- Requests 1,536 dimensions to match the `vector(1536)` database column
 - Returns `{ "embedding": [...] }` (1,536-dimensional vector)
 
 **`generate-answer`** (Step 06):
 - POST endpoint accepting `{ "question": "...", "context_talks": [{ title, speaker, text }] }`
-- Calls GPT-4o with the question + context talks as a prompt
-- Instructs GPT to cite which talks it draws from
+- Calls Gemini 3.8 Flash (`gemini-3.8-flash`) with the question + context talks as a prompt
+- Instructs Gemini to cite which talks it draws from
 - Returns `{ "answer": "..." }`
 
 ### Auth Pattern (Important!)
@@ -164,17 +165,16 @@ Supabase is currently transitioning its JWT verification approach. Students shou
 2. Handle authentication **manually inside the function** by extracting the JWT from the `Authorization` header and verifying it against Supabase Auth
 3. Use a shared auth helper module at `supabase/functions/_shared/auth.ts`
 
-### Reference Implementation
+### References
 
-A working implementation is available at: [github.com/michaeltreynolds/cragger/tree/main/supabase/functions](https://github.com/michaeltreynolds/cragger/tree/main/supabase/functions)
-
-Students are encouraged to reference this, but should write their own version with your help so they understand the code.
+Use the official [Supabase Edge Functions docs](https://supabase.com/docs/guides/functions) and [Gemini API docs](https://ai.google.dev/gemini-api/docs) as the primary references. Students should write their own version with your help so they understand the code.
 
 ### Key Patterns
 - Functions are written in **TypeScript/Deno** (not Node.js)
 - CORS handling is shared via `_shared/cors.ts`
 - Auth verification is shared via `_shared/auth.ts`
-- OpenAI API key is accessed via `Deno.env.get('OPENAI_API_KEY')` (set with `supabase secrets set`)
+- Gemini API key is accessed via `Deno.env.get('GEMINI_API_KEY')` (set with `supabase secrets set`); this is separate from the local `config.secret.json` used by scripts
+- Send Gemini requests with the `x-goog-api-key` header; never expose the key in browser code
 
 ## Common Student Questions
 

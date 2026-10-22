@@ -26,7 +26,7 @@ Congratulations! You built a production-ready RAG application from scratch.
 
 - **Ask a specific speaker**: Filter RAG answers to only use talks from a specific speaker
 - **Question history**: Store user questions and answers in a new Supabase table
-- **Embedding caching**: Cache question embeddings to avoid re-calling OpenAI for repeated questions
+- **Embedding caching**: Cache question embeddings to avoid re-calling Gemini for repeated questions
 - **Analytics dashboard**: Track popular questions and frequently matched talks
 - **Compare search modes**: Show keyword, semantic, and RAG results side-by-side for the same query
 
@@ -41,12 +41,12 @@ Answer these in your submission. Use your AI assistant to discuss these — it c
 Draw or describe a diagram showing what protects each sensitive asset in this application. Your answer should address:
 - Why is the anon key safe to expose in `config.public.json`?
 - What would happen if someone got the service role key?
-- How do Edge Functions protect the OpenAI API key?
+- How do Edge Functions protect the Gemini API key?
 - What role does Row Level Security play?
 
 ### 2. Edge Functions & the "Secure Middle" ⭐⭐⭐⭐⭐
 
-Why can't we call OpenAI directly from the browser? Explain the flow: browser → Edge Function → OpenAI. What role does JWT verification play in this chain? How does this pattern apply to other production applications?
+Why can't we call Gemini directly from the browser? Explain the flow: browser → Edge Function → Gemini. What role does JWT verification play in this chain? How does this pattern apply to other production applications?
 
 ### 3. From SQL to Semantics ⭐⭐⭐⭐
 
@@ -80,12 +80,12 @@ Compare sentence-level vs. paragraph-level chunking. Which gives better results 
 When RAG returns an answer, link each citation to the original talk so users can read the full context.
 
 ### Add Streaming Responses
-Instead of waiting for the full GPT response, stream it token-by-token for a ChatGPT-like experience.
+Instead of waiting for the full Gemini response, stream it token-by-token for a ChatGPT-like experience.
 
 ## 📚 Resources
 
 - [Supabase pgvector Guide](https://supabase.com/docs/guides/ai)
-- [OpenAI Embeddings Guide](https://platform.openai.com/docs/guides/embeddings)
+- [Gemini Embeddings Guide](https://ai.google.dev/gemini-api/docs/embeddings)
 - [RAG Best Practices](https://weaviate.io/blog/rag-evaluation)
 - [Chunking Strategies for RAG](https://www.superlinked.com/vectorhub/articles/chunking-vs-semantic-splitting)
 - [Supabase Edge Functions Docs](https://supabase.com/docs/guides/functions)

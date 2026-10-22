@@ -1,11 +1,11 @@
 """
 Step 4: Generate Embeddings
 ===============================
-Reads scripts/output/sentences.json and generates OpenAI embeddings
+Reads scripts/output/sentences.json and generates Gemini embeddings
 for each sentence. Saves the result to scripts/output/sentences_with_embeddings.json.
 
-This is the most expensive step (~$0.60 in API costs). The output is
-saved to disk so you won't lose your work if the next step fails.
+This is the most API-intensive step. The output is saved to disk so you
+won't lose your work if the next step fails or hits a quota limit.
 
 Usage:
     python scripts/04_embed_data.py
@@ -17,7 +17,7 @@ Output:
     scripts/output/sentences_with_embeddings.json  — sentence records with embedding vectors
 
 Prerequisites:
-    - config.secret.json with OPENAI_API_KEY
+    - config.secret.json with GEMINI_API_KEY
     - scripts/output/sentences.json from the import step
 """
 
@@ -26,13 +26,18 @@ import os
 import sys
 import time
 
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from tqdm import tqdm
 
 
 INPUT_FILE = os.path.join('scripts', 'output', 'sentences.json')
 OUTPUT_FILE = os.path.join('scripts', 'output', 'sentences_with_embeddings.json')
 BATCH_SIZE = 100
+EMBEDDING_MODEL = 'gemini-embedding-2'
+EMBEDDING_DIMENSIONS = 1536
+RATE_LIMIT_RETRY_SECONDS = 60
+SECONDS_BETWEEN_BATCHES = 2
 
 
 def load_secrets():
@@ -52,7 +57,7 @@ def main():
     print("=" * 60)
     print(f"Generating Embeddings for {len(records):,} Sentences")
     print("=" * 60)
-    print(f"   Model: text-embedding-3-small (1,536 dimensions)")
+    print(f"   Model: {EMBEDDING_MODEL} ({EMBEDDING_DIMENSIONS:,} dimensions)")
     print(f"   Batch size: {BATCH_SIZE}\n")
 
     # Check if there's a partial result we can resume from
@@ -73,36 +78,68 @@ def main():
 
     # Generate embeddings
     secrets = load_secrets()
-    client = OpenAI(api_key=secrets['OPENAI_API_KEY'])
+    api_key = secrets.get('GEMINI_API_KEY')
+    if not api_key:
+        print("❌ GEMINI_API_KEY is missing from config.secret.json")
+        sys.exit(1)
+
+    client = genai.Client(api_key=api_key)
 
     embedded_records = list(existing)  # Start from any partial results
     errors = 0
 
     for i in tqdm(range(0, len(records_to_embed), BATCH_SIZE), desc="Embedding"):
         batch = records_to_embed[i:i + BATCH_SIZE]
-        batch_texts = [r['text'] for r in batch]
+        # Gemini Embedding 2 uses the same retrieval-document format that the
+        # query Edge Function pairs with its question-answering query format.
+        batch_contents = [
+            types.Content(parts=[
+                types.Part.from_text(
+                    text=f"title: {record.get('title') or 'none'} | text: {record['text']}"
+                )
+            ])
+            for record in batch
+        ]
 
-        try:
-            response = client.embeddings.create(
-                model='text-embedding-3-small',
-                input=batch_texts
-            )
+        while True:
+            try:
+                response = client.models.embed_content(
+                    model=EMBEDDING_MODEL,
+                    contents=batch_contents,
+                    config=types.EmbedContentConfig(
+                        output_dimensionality=EMBEDDING_DIMENSIONS
+                    )
+                )
 
-            for record, item in zip(batch, response.data):
-                record_with_embedding = dict(record)
-                record_with_embedding['embedding'] = item.embedding
-                embedded_records.append(record_with_embedding)
+                if not response.embeddings or len(response.embeddings) != len(batch):
+                    raise ValueError("Gemini returned a different number of embeddings than inputs")
 
-        except Exception as e:
-            print(f"\n   ❌ Batch error: {e}")
-            errors += len(batch)
+                for record, item in zip(batch, response.embeddings):
+                    record_with_embedding = dict(record)
+                    record_with_embedding['embedding'] = item.values
+                    embedded_records.append(record_with_embedding)
+                break
+
+            except Exception as e:
+                # Preserve prefix-only checkpoints so resume-by-count never skips records.
+                if '429' in str(e) or 'RESOURCE_EXHAUSTED' in str(e):
+                    print(
+                        f"\n   ⏳ Gemini rate limit reached; retrying this batch "
+                        f"in {RATE_LIMIT_RETRY_SECONDS} seconds."
+                    )
+                    time.sleep(RATE_LIMIT_RETRY_SECONDS)
+                    continue
+
+                print(f"\n   ❌ Batch error; stopping so this batch can be retried: {e}")
+                errors += len(batch)
+                raise
 
         # Save progress every 10 batches (in case of crash)
         if (i // BATCH_SIZE + 1) % 10 == 0:
             with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
                 json.dump(embedded_records, f, ensure_ascii=False)
 
-        time.sleep(0.1)
+        time.sleep(SECONDS_BETWEEN_BATCHES)
 
     # Final save
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
@@ -114,11 +151,7 @@ def main():
     if errors:
         print(f"   Errors:   {errors:,}")
 
-    # Estimate cost
-    total_chars = sum(len(r['text']) for r in embedded_records)
-    est_tokens = total_chars / 4  # rough estimate
-    cost = (est_tokens / 1_000_000) * 0.020
-    print(f"   💰 Estimated cost: ${cost:.4f}")
+    print("   Check Google AI Studio for current quota and usage details.")
 
     print(f"\n💾 Saved to {OUTPUT_FILE} ({file_size_mb:.1f} MB)")
     print(f"   This file is your safety net — embeddings are preserved on disk.")
